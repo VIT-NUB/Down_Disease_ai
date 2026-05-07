@@ -4,52 +4,61 @@ import os
 import PyPDF2
 import docx
 
+# Cross-platform: only set Windows path on Windows
 if os.name == 'nt':
-        pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 def extract_text_from_image(image_path):
-        if not os.path.exists(image_path):
-                    raise FileNotFoundError(f"Image not found at {image_path}")
+            if not os.path.exists(image_path):
+                            raise FileNotFoundError(f"Image not found at {image_path}")
 
-        img = cv2.imread(image_path)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = cv2.imread(image_path)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # remove noise
-        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+    gray = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # threshold
-        _, thresh = cv2.threshold(
-            gray,
-            0,
-            255,
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
+    _, thresh = cv2.threshold(
+                    gray,
+                    0,
+                    255,
+                    cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
 
-    text = pytesseract.image_to_string(thresh)
+    text = pytesseract.image_to_string(gray)
     return text
 
 def extract_text_from_pdf(pdf_path):
-        text = ""
-        with open(pdf_path, 'rb') as f:
-                    pdf_reader = PyPDF2.PdfReader(f)
-                    for page in pdf_reader.pages:
-                                    text += page.extract_text()
-                            return text
+            text = ""
+            with open(pdf_path, 'rb') as file:
+                            reader = PyPDF2.PdfReader(file)
+                            for page in reader.pages:
+                                                extracted = page.extract_text()
+                                                if extracted:
+                                                                        text += extracted + "\n"
+                                                            return text
 
 def extract_text_from_docx(docx_path):
-        doc = docx.Document(docx_path)
-        text = ""
-        for para in doc.paragraphs:
-                    text += para.text + "\n"
-                return text
+            doc = docx.Document(docx_path)
+            text = "\n".join([para.text for para in doc.paragraphs])
+            return text
 
-def extract_text(file_path):
-        ext = os.path.splitext(file_path)[1].lower()
-    if ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-                return extract_text_from_image(file_path)
+def extract_text_from_txt(txt_path):
+            with open(txt_path, 'r', encoding='utf-8') as f:
+                            return f.read()
+
+        def extract_text_from_file(file_path):
+                    ext = os.path.splitext(file_path)[1].lower()
+
+    image_extensions = ['.png', '.jpg', '.jpeg', '.bmp', '.tiff']
+
+    if ext in image_extensions:
+                    return extract_text_from_image(file_path)
 elif ext == '.pdf':
-        return extract_text_from_pdf(file_path)
+                return extract_text_from_pdf(file_path)
 elif ext == '.docx':
-        return extract_text_from_docx(file_path)
+                return extract_text_from_docx(file_path)
+elif ext == '.txt':
+                return extract_text_from_txt(file_path)
 else:
-        raise ValueError(f"Unsupported file format: {ext}")
+                raise ValueError(f"Unsupported file format: {ext}")
+        
