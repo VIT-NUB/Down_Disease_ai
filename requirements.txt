@@ -1,0 +1,11 @@
+opencv-python
+pytesseract
+pillow
+numpy
+pandas
+fastapi
+uvicorn
+python-multipart
+sqlalchemy
+PyPDF2
+python-docx
