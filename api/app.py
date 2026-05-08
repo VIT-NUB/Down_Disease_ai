@@ -3,7 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import os
 import sys
+import datetime
 from sqlalchemy.orm import Session # type: ignore
+from pydantic import BaseModel
+from typing import Optional
 
 # Add parent directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -11,8 +14,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ocr.parse_text import parse_cbc_report
 from models.predict import predict_severity
 
-# Import database
-from database import PatientCase, get_db
+# Import database models
+from database import PatientCase, Patient, PatientHistory, DoctorReminder, get_db
 
 app = FastAPI(title="Down Syndrome AI API", description="API for predicting Down Syndrome severity from medical reports")
 
@@ -25,67 +28,63 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from typing import Optional
-
-
-
-@app.get("/history")
-def get_all_history(db: Session = Depends(get_db)):
+@app.get("/patients")
+def get_all_patients(db: Session = Depends(get_db)):
     """
-    Get all previously saved patient cases.
+    Get all patients with their latest status and trend.
     """
-    cases = db.query(PatientCase).order_by(PatientCase.created_at.desc()).all()
-    return {"success": True, "cases": cases}
+    patients = db.query(Patient).order_by(Patient.updated_at.desc()).all()
+    return {"success": True, "patients": patients}
 
 @app.get("/patient/{patient_name}/history")
 def get_patient_history(patient_name: str, db: Session = Depends(get_db)):
     """
     Get the historical assessments for a specific patient to track progress (Improving, Stable, Worsening).
     """
-    cases = db.query(PatientCase).filter(PatientCase.patient_name == patient_name).order_by(PatientCase.created_at.asc()).all()
+    patient = db.query(Patient).filter(Patient.patient_name == patient_name).first()
     
-    if not cases:
+    if not patient:
         return {"success": False, "message": "No history found for this patient."}
         
-    history = []
-    severity_map = {"Low": 1, "Medium": 2, "High": 3, "Incomplete": 0}
+    history_records = db.query(PatientHistory).filter(PatientHistory.patient_id == patient.id).order_by(PatientHistory.created_at.asc()).all()
     
-    for i, case in enumerate(cases):
-        trend = "Initial Assessment"
-        if i > 0:
-            prev_severity = severity_map.get(cases[i-1].risk_level, 0)
-            curr_severity = severity_map.get(case.risk_level, 0)
-            
-            if curr_severity == 0 or prev_severity == 0:
-                trend = "N/A (Incomplete Data)"
-            elif curr_severity < prev_severity:
-                trend = "Improving 🟢"
-            elif curr_severity > prev_severity:
-                trend = "Worsening 🔴"
-            else:
-                trend = "Stable 🟡"
-                
-        history.append({
+    history_list = []
+    for case in history_records:
+        history_list.append({
             "id": case.id,
             "date": case.created_at,
-            "diagnosis": case.diagnosis,
-            "risk_level": case.risk_level,
+            "record_source": case.record_source,
+            "ai_diagnosis": case.ai_diagnosis,
             "confidence_percentage": round(case.confidence, 2) if case.confidence else 0.0,
-            "trend": trend
+            "recommendation": case.recommendation
         })
         
-    latest = history[-1]
-    
     return {
         "success": True,
-        "patient_name": patient_name,
-        "total_assessments": len(cases),
-        "current_status": latest["risk_level"],
-        "latest_trend": latest["trend"],
-        "history": history
+        "patient_name": patient.patient_name,
+        "disease_type": patient.disease_type,
+        "current_status": patient.latest_ai_status,
+        "latest_trend": patient.status_trend,
+        "total_assessments": len(history_records),
+        "history": history_list
     }
 
-from pydantic import BaseModel
+@app.get("/patient/{patient_name}/reminders")
+def get_patient_reminders(patient_name: str, db: Session = Depends(get_db)):
+    """
+    Get active reminders for a specific patient.
+    """
+    patient = db.query(Patient).filter(Patient.patient_name == patient_name).first()
+    if not patient:
+        return {"success": False, "message": "Patient not found."}
+        
+    reminders = db.query(DoctorReminder).filter(
+        DoctorReminder.patient_id == patient.id,
+        DoctorReminder.is_resolved == False
+    ).order_by(DoctorReminder.created_at.desc()).all()
+    
+    return {"success": True, "reminders": reminders}
+
 
 class FollowUpRequest(BaseModel):
     patient_name: str
@@ -96,45 +95,89 @@ class FollowUpRequest(BaseModel):
 @app.post("/auto_analyze_followup")
 async def auto_analyze_followup(data: FollowUpRequest, db: Session = Depends(get_db)):
     """
-    Automatically analyzes a patient's state based on Follow-up sections:
-    1. Lab Reports
-    2. Files & Documents
-    3. Progress & Vitals
-    4. Chat with Doctor
-    Returns only the severity state (Low, Medium, High) to be sent to the doctor.
+    Automatically analyzes a patient's state based on Follow-up sections.
+    Creates a new history record and updates the patient's trend.
+    Also creates a Doctor Reminder if the condition worsens.
     """
     try:
-        # 1. Simulate AI reading from the 4 sections
-        # In a real scenario, we query the DB for the latest vitals, chat logs, and parsed OCR from files.
+        # 1. Parse texts
         raw_text = data.latest_lab_text + "\n" + data.latest_chat_text
         parsed_data = parse_cbc_report(raw_text)
         
-        # Merge vitals into parsed data (e.g., Heart Rate mapped to Echo, etc.)
+        # Merge vitals
         for k, v in data.vitals.items():
             parsed_data[k] = v
             
         # 2. Run Prediction Model
         result = predict_severity(parsed_data)
         severity = result['Prediction'] # 'Low', 'Medium', or 'High'
+        confidence = result['Confidence'] * 100
         
-        # 3. Save to History silently
-        new_case = PatientCase(
-            patient_name=data.patient_name,
-            filename="Auto-Analyzed from Follow-up Sections",
-            extracted_data=parsed_data,
-            diagnosis=severity,
-            risk_level=severity,
-            confidence=result['Confidence'] * 100,
+        # 3. Find or Create Patient
+        patient = db.query(Patient).filter(Patient.patient_name == data.patient_name).first()
+        is_new_patient = False
+        
+        if not patient:
+            patient = Patient(
+                patient_name=data.patient_name,
+                latest_ai_status=severity,
+                status_trend="Stable"
+            )
+            db.add(patient)
+            db.commit()
+            db.refresh(patient)
+            is_new_patient = True
+
+        # 4. Calculate Trend if it's an existing patient
+        trend = patient.status_trend
+        if not is_new_patient:
+            severity_map = {"Low": 1, "Medium": 2, "High": 3, "Unknown": 0}
+            prev_sev = severity_map.get(patient.latest_ai_status, 0)
+            curr_sev = severity_map.get(severity, 0)
+            
+            if curr_sev != 0 and prev_sev != 0:
+                if curr_sev < prev_sev:
+                    trend = "Improving 🟢"
+                elif curr_sev > prev_sev:
+                    trend = "Worsening 🔴"
+                else:
+                    trend = "Stable 🟡"
+            
+            # Update patient latest status
+            patient.latest_ai_status = severity
+            patient.status_trend = trend
+            patient.updated_at = datetime.datetime.utcnow()
+            db.commit()
+
+        # 5. Add Patient History Record
+        history_record = PatientHistory(
+            patient_id=patient.id,
+            record_source="Auto-Analyzed Follow-up",
+            extracted_medical_features=parsed_data,
+            vitals_history=data.vitals,
+            chat_notes_or_symptoms=data.latest_chat_text,
+            ai_diagnosis=severity,
+            confidence=confidence,
             recommendation="Auto-generated from Follow-up data."
         )
-        db.add(new_case)
+        db.add(history_record)
+        
+        # 6. Create a Reminder if Worsening
+        if "Worsening" in trend:
+            reminder = DoctorReminder(
+                patient_id=patient.id,
+                reminder_type="Deterioration Alert",
+                reminder_text=f"Patient {patient.patient_name}'s condition has worsened to {severity}. Please review."
+            )
+            db.add(reminder)
+            
         db.commit()
         
-        # Return ONLY the severity state as requested
         return {
             "success": True,
-            "patient_name": data.patient_name,
-            "severity_state": severity
+            "patient_name": patient.patient_name,
+            "severity_state": severity,
+            "trend": trend
         }
         
     except Exception as e:
@@ -145,7 +188,7 @@ async def auto_analyze_followup(data: FollowUpRequest, db: Session = Depends(get
 
 @app.get("/")
 def read_root():
-    return {"message": "Down Syndrome AI API is running with Database support!"}
+    return {"message": "Down Syndrome AI API is running with Advanced DB support!"}
 
 if __name__ == "__main__":
     print("Starting API Server on http://0.0.0.0:8000")

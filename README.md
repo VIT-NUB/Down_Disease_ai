@@ -26,9 +26,11 @@ The system allows patients or doctors to upload medical reports (Images, PDFs, T
    - Demands missing tests (like TSH or Echo) when necessary for a complete diagnosis.
 4. **Machine Learning AI Model**
    - Uses a trained **Random Forest Classifier** to learn complex non-linear patterns (e.g., the dangerous interaction between High TSH and low Hb) instead of relying on simple rule-based logic.
-5. **Time-Series Patient Tracking (History)**
-   - Built-in SQLite database using SQLAlchemy.
-   - Tracks a patient's historical uploads and calculates progress trends (**Improving 🟢, Worsening 🔴, Stable 🟡**).
+5. **Advanced Patient Tracking & Reminders System**
+   - Built-in Relational SQLite database using SQLAlchemy (`Patient`, `PatientHistory`, `DoctorReminder`).
+   - Tracks a patient's entire historical assessments as individual records without deleting old results.
+   - Calculates progress trends (**Improving 🟢, Worsening 🔴, Stable 🟡**).
+   - Automatically generates **Doctor Reminders & Deterioration Alerts** when a patient's condition worsens.
 6. **Flutter-Ready API**
    - A fully functional REST API built with FastAPI, ready to be consumed directly by a Flutter mobile application.
 
@@ -103,8 +105,11 @@ The API is fully documented via Swagger UI. You can access the interactive UI at
   * `current_status`: Latest Risk level.
   * `latest_trend`: "Improving 🟢", "Worsening 🔴", or "Stable 🟡".
 
-### 4. `GET /history`
-* **Description**: Fetches all patient cases stored in the database.
+### 4. `GET /patients`
+* **Description**: Fetches a list of all patients along with their latest AI status and trend.
+
+### 5. `GET /patient/{patient_name}/reminders`
+* **Description**: Retrieves all unresolved reminders and deterioration alerts generated for a specific patient.
 
 ---
 
