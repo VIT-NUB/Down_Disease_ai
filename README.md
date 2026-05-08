@@ -14,10 +14,14 @@ The system allows patients or doctors to upload medical reports (Images, PDFs, T
 
 ## 🌟 Core Features
 
-1. **Intelligent File Uploads (Images & Documents)**
+1. **Ambient AI & Background Triage (New!)**
+   - The AI works silently in the background of the Flutter App's "Follow-Up" section.
+   - It aggregates data from **Lab Reports, Patient Chats, Vitals, and Files**.
+   - It automatically updates the Doctor's Dashboard with the patient's severity state (`Low`, `Medium`, `High`) without requiring manual analysis requests from the patient.
+2. **Intelligent File Uploads (Images & Documents)**
    - Extracts data from **Images** (CBC, X-ray, Echo scans) using OCR (Tesseract & OpenCV).
    - Extracts data from **Text Documents** (PDFs, DOCX, TXT) using PyPDF2 and python-docx.
-2. **Automated NLP Parsing**
+3. **Automated NLP Parsing**
    - Automatically understands and parses key parameters from raw unstructured text (e.g., Hemoglobin, WBC, TSH, Echo Score).
 3. **Smart Data Validation & Missing Data Handling**
    - Discards completely illogical OCR readings (e.g., auto-correcting `Hemoglobin = 110` to `11.0`).
@@ -85,28 +89,32 @@ The API is fully documented via Swagger UI. You can access the interactive UI at
 * **Description**: Health check endpoint.
 * **Returns**: Welcome message ensuring the server is running.
 
-### 2. `POST /predict`
-* **Description**: The core prediction pipeline. Accepts medical files, extracts text, runs the AI model, saves to DB, and returns the diagnosis.
-* **Parameters**:
-  * `image_file` (Optional, File): Medical image.
-  * `document_file` (Optional, File): Medical PDF/DOCX.
-  * `patient_name` (Form String): Name of the patient.
+### 2. `POST /auto_analyze_followup` (🌟 Primary Ambient AI Flow)
+* **Description**: Automatically analyzes a patient's state in the background without user intervention. It aggregates data from the app's Follow-up sections (Lab Reports, Files, Progress & Vitals, Chat) and returns a simple severity state to the doctor's dashboard.
+* **Parameters** (JSON Body):
+  * `patient_name`: String
+  * `vitals`: Dictionary (e.g., Echo Score, Hearing Loss)
+  * `latest_lab_text`: String (OCR text from Lab Reports)
+  * `latest_chat_text`: String (Text from patient chat)
 * **Returns JSON**:
   * `success`: Boolean
-  * `diagnosis` / `risk_level`: e.g., "High", "Medium", "Low", or "Incomplete".
-  * `confidence_percentage`: Model confidence.
-  * `recommendation`: Clinical action needed.
-  * `chart_data`: Array of probabilities intended for Flutter UI rendering.
+  * `severity_state`: "High", "Medium", or "Low"
 
-### 3. `GET /patient/{patient_name}/history`
+### 3. `POST /predict` (Legacy / Manual Upload Flow)
+* **Description**: Accepts medical files (images/documents) directly, extracts text, runs the AI model, saves to DB, and returns a detailed diagnosis with probabilities.
+* **Parameters**:
+  * `image_file` (Optional, File)
+  * `document_file` (Optional, File)
+  * `patient_name` (Form String)
+* **Returns JSON**: Detailed analysis including `confidence_percentage`, `recommendation`, and `chart_data`.
+
+### 4. `GET /patient/{patient_name}/history`
 * **Description**: Retrieves all historical assessments for a specific patient and calculates their clinical progress trend.
 * **Returns JSON**:
-  * `total_assessments`: Number of visits.
   * `current_status`: Latest Risk level.
   * `latest_trend`: "Improving 🟢", "Worsening 🔴", or "Stable 🟡".
-  * `history`: Array of all previous visits and their results.
 
-### 4. `GET /history`
+### 5. `GET /history`
 * **Description**: Fetches all patient cases stored in the database.
 
 ---
