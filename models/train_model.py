@@ -8,7 +8,8 @@ from sklearn.metrics import classification_report, accuracy_score
 
 def train_severity_model():
     # Load dataset
-    data_path = r'd:\PRGraduation\Down_AI\datasets\patient_data.csv'
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_path = os.path.join(base_dir, 'datasets', 'patient_data.csv')
     if not os.path.exists(data_path):
         print(f"Error: Dataset not found at {data_path}")
         return
@@ -38,8 +39,9 @@ def train_severity_model():
     print(classification_report(y_test, y_pred))
     
     # Save the model
-    os.makedirs(r'd:\PRGraduation\Down_AI\models', exist_ok=True)
-    model_path = r'd:\PRGraduation\Down_AI\models\ds_severity_model.pkl'
+    models_dir = os.path.join(base_dir, 'models')
+    os.makedirs(models_dir, exist_ok=True)
+    model_path = os.path.join(models_dir, 'ds_severity_model.pkl')
     
     with open(model_path, 'wb') as f:
         pickle.dump(model, f)

@@ -73,10 +73,12 @@ def generate_synthetic_data(num_samples=1000):
     df['Severity'] = severity
     
     # Create datasets directory if it doesn't exist
-    os.makedirs(r'd:\PRGraduation\Down_AI\datasets', exist_ok=True)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    datasets_dir = os.path.join(base_dir, 'datasets')
+    os.makedirs(datasets_dir, exist_ok=True)
     
     # Save to CSV
-    output_path = r'd:\PRGraduation\Down_AI\datasets\patient_data.csv'
+    output_path = os.path.join(datasets_dir, 'patient_data.csv')
     df.to_csv(output_path, index=False)
     print(f"Synthetic dataset generated and saved to {output_path}")
     print(f"Severity Distribution:\n{df['Severity'].value_counts()}")
