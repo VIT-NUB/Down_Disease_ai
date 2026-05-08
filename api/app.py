@@ -1,7 +1,6 @@
-from fastapi import FastAPI, File, UploadFile, Form, Depends
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-import shutil
 import os
 import sys
 from sqlalchemy.orm import Session # type: ignore
@@ -9,7 +8,6 @@ from sqlalchemy.orm import Session # type: ignore
 # Add parent directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from ocr.extract_text import extract_text_from_file
 from ocr.parse_text import parse_cbc_report
 from models.predict import predict_severity
 
@@ -29,110 +27,7 @@ app.add_middleware(
 
 from typing import Optional
 
-@app.post("/predict")
-async def predict_patient_status(
-    image_file: Optional[UploadFile] = File(None, description="Upload medical images (PNG, JPG, etc.)"),
-    document_file: Optional[UploadFile] = File(None, description="Upload medical documents (PDF, DOCX, TXT)"),
-    patient_name: str = Form("Unknown"),
-    db: Session = Depends(get_db)
-):
-    """
-    Receives an image and/or a document, automatically extracts text,
-    predicts severity, generates recommendation, and saves case to database.
-    """
-    if not image_file and not document_file:
-        return {"success": False, "error": "Please upload at least one file (image or document)."}
-        
-    raw_text = ""
-    temp_files = []
-    filenames = []
-        
-    try:
-        from ocr.extract_text import extract_text_from_file
-        
-        # 1. Save and extract from image if provided
-        if image_file:
-            temp_img_path = f"temp_img_{image_file.filename}"
-            with open(temp_img_path, "wb") as buffer:
-                shutil.copyfileobj(image_file.file, buffer)
-            temp_files.append(temp_img_path)
-            filenames.append(image_file.filename)
-            raw_text += extract_text_from_file(temp_img_path) + "\n"
-            
-        # 2. Save and extract from document if provided
-        if document_file:
-            temp_doc_path = f"temp_doc_{document_file.filename}"
-            with open(temp_doc_path, "wb") as buffer:
-                shutil.copyfileobj(document_file.file, buffer)
-            temp_files.append(temp_doc_path)
-            filenames.append(document_file.filename)
-            raw_text += extract_text_from_file(temp_doc_path) + "\n"
-        
-        # 3. Parse Data (Fully Automated)
-        parsed_data = parse_cbc_report(raw_text)
-        
-        # 4. Run Prediction Model (passing only what OCR found)
-        result = predict_severity(parsed_data)
-        severity = result['Prediction']
-        confidence = result['Confidence'] * 100
-        missing = result['Missing_Features']
-        
-        # 5. Generate Recommendation and Risk Level based on completeness
-        critical_missing = [f for f in ['TSH', 'Echo_Abnormality_Score', 'Hearing_Loss_dB'] if f in missing]
-        
-        if critical_missing:
-            severity = "Incomplete"
-            recommendation = f"Assessment Incomplete. Missing Data: {', '.join(critical_missing)}. Please provide Thyroid and Echo/Hearing panels for a confident diagnosis."
-        else:
-            if severity == 'High':
-                recommendation = "URGENT: High risk detected. Immediate medical intervention and follow-up required."
-            elif severity == 'Medium':
-                recommendation = "WARNING: Moderate risk. Close monitoring of Thyroid/Heart/Blood recommended."
-            else:
-                recommendation = "NORMAL: Stable condition. Proceed with regular check-ups."
-            
-        # 6. Format response for Flutter Charts
-        chart_data = [
-            {"status": k, "percentage": round(v * 100, 2)} 
-            for k, v in result['All_Probabilities'].items()
-        ]
-        
-        # 7. Save to Database
-        new_case = PatientCase(
-            patient_name=patient_name,
-            filename=" | ".join(filenames),
-            extracted_data=parsed_data,
-            diagnosis=severity,
-            risk_level=severity,
-            confidence=confidence,
-            recommendation=recommendation
-        )
-        db.add(new_case)
-        db.commit()
-        db.refresh(new_case)
-        
-        return {
-            "success": True,
-            "id": new_case.id,
-            "diagnosis": severity,
-            "risk_level": severity,
-            "confidence_percentage": round(confidence, 2),
-            "recommendation": recommendation,
-            "chart_data": chart_data,
-            "extracted_features": result['Used_Features'],
-            "message": "Prediction successful and saved to database"
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-    finally:
-        # Clean up temp files
-        for temp_file in temp_files:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+
 
 @app.get("/history")
 def get_all_history(db: Session = Depends(get_db)):

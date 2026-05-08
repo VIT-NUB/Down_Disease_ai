@@ -14,14 +14,11 @@ The system allows patients or doctors to upload medical reports (Images, PDFs, T
 
 ## 🌟 Core Features
 
-1. **Ambient AI & Background Triage (New!)**
+1. **Ambient AI & Background Triage**
    - The AI works silently in the background of the Flutter App's "Follow-Up" section.
    - It aggregates data from **Lab Reports, Patient Chats, Vitals, and Files**.
    - It automatically updates the Doctor's Dashboard with the patient's severity state (`Low`, `Medium`, `High`) without requiring manual analysis requests from the patient.
-2. **Intelligent File Uploads (Images & Documents)**
-   - Extracts data from **Images** (CBC, X-ray, Echo scans) using OCR (Tesseract & OpenCV).
-   - Extracts data from **Text Documents** (PDFs, DOCX, TXT) using PyPDF2 and python-docx.
-3. **Automated NLP Parsing**
+2. **Automated NLP Parsing**
    - Automatically understands and parses key parameters from raw unstructured text (e.g., Hemoglobin, WBC, TSH, Echo Score).
 3. **Smart Data Validation & Missing Data Handling**
    - Discards completely illogical OCR readings (e.g., auto-correcting `Hemoglobin = 110` to `11.0`).
@@ -100,21 +97,13 @@ The API is fully documented via Swagger UI. You can access the interactive UI at
   * `success`: Boolean
   * `severity_state`: "High", "Medium", or "Low"
 
-### 3. `POST /predict` (Legacy / Manual Upload Flow)
-* **Description**: Accepts medical files (images/documents) directly, extracts text, runs the AI model, saves to DB, and returns a detailed diagnosis with probabilities.
-* **Parameters**:
-  * `image_file` (Optional, File)
-  * `document_file` (Optional, File)
-  * `patient_name` (Form String)
-* **Returns JSON**: Detailed analysis including `confidence_percentage`, `recommendation`, and `chart_data`.
-
-### 4. `GET /patient/{patient_name}/history`
+### 3. `GET /patient/{patient_name}/history`
 * **Description**: Retrieves all historical assessments for a specific patient and calculates their clinical progress trend.
 * **Returns JSON**:
   * `current_status`: Latest Risk level.
   * `latest_trend`: "Improving 🟢", "Worsening 🔴", or "Stable 🟡".
 
-### 5. `GET /history`
+### 4. `GET /history`
 * **Description**: Fetches all patient cases stored in the database.
 
 ---
