@@ -190,6 +190,64 @@ def get_patient_history(patient_name: str, db: Session = Depends(get_db)):
         "history": history
     }
 
+from pydantic import BaseModel
+
+class FollowUpRequest(BaseModel):
+    patient_name: str
+    vitals: dict = {}
+    latest_lab_text: str = ""
+    latest_chat_text: str = ""
+
+@app.post("/auto_analyze_followup")
+async def auto_analyze_followup(data: FollowUpRequest, db: Session = Depends(get_db)):
+    """
+    Automatically analyzes a patient's state based on Follow-up sections:
+    1. Lab Reports
+    2. Files & Documents
+    3. Progress & Vitals
+    4. Chat with Doctor
+    Returns only the severity state (Low, Medium, High) to be sent to the doctor.
+    """
+    try:
+        # 1. Simulate AI reading from the 4 sections
+        # In a real scenario, we query the DB for the latest vitals, chat logs, and parsed OCR from files.
+        raw_text = data.latest_lab_text + "\n" + data.latest_chat_text
+        parsed_data = parse_cbc_report(raw_text)
+        
+        # Merge vitals into parsed data (e.g., Heart Rate mapped to Echo, etc.)
+        for k, v in data.vitals.items():
+            parsed_data[k] = v
+            
+        # 2. Run Prediction Model
+        result = predict_severity(parsed_data)
+        severity = result['Prediction'] # 'Low', 'Medium', or 'High'
+        
+        # 3. Save to History silently
+        new_case = PatientCase(
+            patient_name=data.patient_name,
+            filename="Auto-Analyzed from Follow-up Sections",
+            extracted_data=parsed_data,
+            diagnosis=severity,
+            risk_level=severity,
+            confidence=result['Confidence'] * 100,
+            recommendation="Auto-generated from Follow-up data."
+        )
+        db.add(new_case)
+        db.commit()
+        
+        # Return ONLY the severity state as requested
+        return {
+            "success": True,
+            "patient_name": data.patient_name,
+            "severity_state": severity
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 @app.get("/")
 def read_root():
     return {"message": "Down Syndrome AI API is running with Database support!"}
