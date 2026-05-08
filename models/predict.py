@@ -11,7 +11,7 @@ def predict_severity(patient_data):
         'Age', 'Hemoglobin', 'RBC_Count', 'WBC_Count', 'MCV', 
         'TSH', 'T4', 'Echo_Abnormality_Score', 'Hearing_Loss_dB'
     """
-    model_path = r'd:\PRGraduation\Down_AI\models\ds_severity_model.pkl'
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ds_severity_model.pkl')
     
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model not found at {model_path}. Please train the model first.")
