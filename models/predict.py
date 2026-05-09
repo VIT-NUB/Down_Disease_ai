@@ -11,13 +11,18 @@ def predict_severity(patient_data):
         'Age', 'Hemoglobin', 'RBC_Count', 'WBC_Count', 'MCV', 
         'TSH', 'T4', 'Echo_Abnormality_Score', 'Hearing_Loss_dB'
     """
-    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ds_severity_model.pkl')
-    
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found at {model_path}. Please train the model first.")
-        
-    with open(model_path, 'rb') as f:
-        model = pickle.load(f)
+    MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "ds_severity_model.pkl"
+)
+
+    if not os.path.exists(MODEL_PATH):
+        raise FileNotFoundError(
+        f"Model not found at {MODEL_PATH}. Please train the model first."
+    )
+
+    with open(MODEL_PATH, "rb") as f:
+     MODEL = pickle.load(f)
         
     # Ensure the input dictionary is converted into a DataFrame with the right order
     features = ['Age', 'Hemoglobin', 'RBC_Count', 'WBC_Count', 'MCV', 
@@ -74,9 +79,9 @@ def predict_severity(patient_data):
     df = pd.DataFrame([input_data])
     
     # Predict
-    prediction = model.predict(df)[0]
-    probabilities = model.predict_proba(df)[0]
-    classes = model.classes_
+    prediction = MODEL.predict(df)[0]
+    probabilities = MODEL.predict_proba(df)[0]
+    classes = MODEL.classes_
     
     # Find confidence
     prob_dict = {cls: prob for cls, prob in zip(classes, probabilities)}

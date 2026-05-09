@@ -1,13 +1,14 @@
-opencv-python
 pytesseract
 pillow
 numpy
 pandas
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 sqlalchemy
 PyPDF2
 python-docx
 scikit-learn
 pydantic
+joblib
+python-dotenv
