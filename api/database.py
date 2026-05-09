@@ -2,8 +2,10 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base # type: ignore
 from sqlalchemy.orm import sessionmaker, relationship # type: ignore
 import datetime
+import os
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./cases_v2.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'cases_v2.db')}"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}

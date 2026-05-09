@@ -1,7 +1,10 @@
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from database import SessionLocal, Patient, PatientHistory
+
+# Add parent directory to path to import our modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from api.database import SessionLocal, Patient, PatientHistory
 
 def test_db():
     db = SessionLocal()

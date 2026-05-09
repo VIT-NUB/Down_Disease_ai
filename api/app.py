@@ -15,7 +15,7 @@ from ocr.parse_text import parse_cbc_report
 from models.predict import predict_severity
 
 # Import database models
-from database import PatientCase, Patient, PatientHistory, DoctorReminder, get_db
+from api.database import PatientCase, Patient, PatientHistory, DoctorReminder, get_db
 
 app = FastAPI(title="Down Syndrome AI API", description="API for predicting Down Syndrome severity from medical reports")
 
