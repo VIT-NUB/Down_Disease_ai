@@ -1,8 +1,71 @@
 import io
 import PyPDF2
-from PIL import Image
+from PIL import Image, ImageFilter, ImageOps
+import os
+import platform
 import pytesseract
 from docx import Document
+if platform.system() == "Windows":
+    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+
+def preprocess_image_for_ocr(image: Image.Image) -> Image.Image:
+    """
+    Improve scanned medical report images before OCR.
+    """
+    # Convert to RGB first
+    image = image.convert("RGB")
+
+    # Convert to grayscale
+    image = ImageOps.grayscale(image)
+
+    # Resize image to improve OCR accuracy
+    width, height = image.size
+    scale_factor = 2
+    image = image.resize((width * scale_factor, height * scale_factor))
+
+    # Increase contrast automatically
+    image = ImageOps.autocontrast(image)
+
+    # Denoise slightly
+    image = image.filter(ImageFilter.MedianFilter(size=3))
+
+    # Sharpen text
+    image = image.filter(ImageFilter.SHARPEN)
+
+    # Convert to black/white threshold
+    image = image.point(lambda x: 0 if x < 160 else 255, "1")
+
+    return image
+
+
+def extract_text_from_image_bytes(file_bytes: bytes) -> str:
+    """
+    Extract text from image bytes using preprocessing + Tesseract OCR.
+    """
+    image = Image.open(io.BytesIO(file_bytes))
+
+    processed_image = preprocess_image_for_ocr(image)
+
+    configs = [
+        "--oem 3 --psm 6",
+        "--oem 3 --psm 4",
+        "--oem 3 --psm 11"
+    ]
+
+    best_text = ""
+
+    for config in configs:
+        try:
+            text = pytesseract.image_to_string(processed_image, config=config)
+            if len(text.strip()) > len(best_text.strip()):
+                best_text = text
+        except Exception as e:
+            print(f"OCR config failed ({config}): {str(e)}")
+
+    return best_text.strip()
 
 
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
@@ -27,8 +90,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                     text += extracted + "\n"
 
         elif filename_lower.endswith((".png", ".jpg", ".jpeg", ".tiff", ".bmp")):
-            image = Image.open(io.BytesIO(file_bytes))
-            text = pytesseract.image_to_string(image)
+            text = extract_text_from_image_bytes(file_bytes)
 
         elif filename_lower.endswith(".txt"):
             text = file_bytes.decode("utf-8", errors="ignore")

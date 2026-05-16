@@ -2,10 +2,6 @@ import re
 
 
 def _clean_number(value):
-    """
-    Clean and convert extracted numeric values.
-    Handles common OCR mistakes.
-    """
     if value is None:
         return None
 
@@ -25,11 +21,24 @@ def _clean_number(value):
     return num
 
 
+def _find_first(text, patterns):
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        if match:
+            value = _clean_number(match.group(1))
+            if value is not None:
+                return value
+    return None
+
+
 def parse_cbc_report(text):
     """
-    Parse raw extracted text from PDF/Image/TXT/DOCX medical reports.
-    Extracts structured medical values required by the AI model.
+    Parse extracted medical text from PDF/Image/TXT/DOCX reports.
+    Supports common CBC, Thyroid, Echo, and Hearing report formats.
     """
+
+    if not text:
+        return {}
 
     structured_data = {}
 
@@ -41,26 +50,33 @@ def parse_cbc_report(text):
 
         "Hemoglobin": [
             r"\bHemoglobin\s*(?:\(Hb\))?\s*[:\-]?\s*([\d\.]+)",
+            r"\bHaemoglobin\s*[:\-]?\s*([\d\.]+)",
             r"\bHB\s*[:\-]?\s*([\d\.]+)",
             r"\bHGB\s*[:\-]?\s*([\d\.]+)"
         ],
 
         "RBC_Count": [
             r"\bRBC\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
-            r"\bRed Blood Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
+            r"\bR\.?B\.?C\.?\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
+            r"\bTotal\s*R\.?B\.?C\.?\s*Count\s*[:\-]?\s*([\d\.]+)",
+            r"\bRed\s*Blood\s*Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
         ],
 
         "WBC_Count": [
             r"\bWBC\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
-            r"\bWhite Blood Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
+            r"\bW\.?B\.?C\.?\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
+            r"\bTotal\s*W\.?B\.?C\.?\s*Count\s*[:\-]?\s*([\d\.]+)",
+            r"\bWhite\s*Blood\s*Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
         ],
 
         "MCV": [
-            r"\bMCV\s*[:\-]?\s*([\d\.]+)"
+            r"\bMCV\s*[:\-]?\s*([\d\.]+)",
+            r"\bMean\s*Corpuscular\s*Volume\s*(?:\(M\.?C\.?V\.?\))?\s*[:\-]?\s*([\d\.]+)"
         ],
 
         "TSH": [
-            r"\bTSH\s*[:\-]?\s*([\d\.]+)"
+            r"\bTSH\s*[:\-]?\s*([\d\.]+)",
+            r"\bThyroid\s*Stimulating\s*Hormone\s*[:\-]?\s*([\d\.]+)"
         ],
 
         "T4": [
@@ -82,21 +98,15 @@ def parse_cbc_report(text):
     }
 
     for feature, regex_list in patterns.items():
-        for pattern in regex_list:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                value = _clean_number(match.group(1))
+        value = _find_first(text, regex_list)
+        if value is not None:
+            structured_data[feature] = value
 
-                if value is not None:
-                    structured_data[feature] = value
-                    break
-
-    # Smart correction for common report units / OCR cases
+    # Smart corrections
     if "Hemoglobin" in structured_data and structured_data["Hemoglobin"] > 30:
         structured_data["Hemoglobin"] = structured_data["Hemoglobin"] / 10.0
 
     if "WBC_Count" in structured_data:
-        # If WBC is written as 18.5 x10^3/uL, convert to 18500
         if structured_data["WBC_Count"] < 100:
             structured_data["WBC_Count"] = int(structured_data["WBC_Count"] * 1000)
 
@@ -111,20 +121,17 @@ def parse_cbc_report(text):
 
 if __name__ == "__main__":
     sample_text = """
-    Patient Name: Sherif Ahmed
-    Age: 8 Years
+    COMPLETE BLOOD COUNT
 
-    Hemoglobin: 9.4 g/dL
-    RBC Count: 3.8 million/uL
-    WBC Count: 12800 /uL
-    MCV: 74 fL
+    Haemoglobin : 9.10 gm/dl
+    Total R.B.C. Count : 3.19 mill/cmm
+    Mean Corpuscular Volume (M.C.V.) : 85.30 fl
+    Total W.B.C. Count : 10560 /ul
 
-    TSH: 6.2 mIU/L
-    T4: 0.9 ng/dL
-
+    TSH: 6.2
+    T4: 0.9
     Echo Abnormality Score: 2
     Hearing Loss dB: 35
     """
 
-    result = parse_cbc_report(sample_text)
-    print(result)
+    print(parse_cbc_report(sample_text))
