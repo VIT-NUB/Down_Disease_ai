@@ -25,5 +25,5 @@ ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 # Railway sets PORT automatically, fallback to 8000
 ENV PORT=8000
 
-# Start the FastAPI server using shell evaluation for $PORT
-CMD ["sh", "-c", "uvicorn api.app:app --host 0.0.0.0 --port $PORT"]
+# Start the FastAPI server
+CMD ["python", "api/app.py"]
