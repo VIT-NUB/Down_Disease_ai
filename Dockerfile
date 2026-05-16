@@ -24,4 +24,4 @@ ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 # Start the FastAPI server.
 # Railway provides PORT automatically. If PORT is missing, fallback to 8000.
-CMD ["sh", "-c", "python -m uvicorn api.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["python", "api/app.py"]
