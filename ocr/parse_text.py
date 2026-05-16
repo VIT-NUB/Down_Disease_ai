@@ -1,66 +1,130 @@
 import re
 
+
+def _clean_number(value):
+    """
+    Clean and convert extracted numeric values.
+    Handles common OCR mistakes.
+    """
+    if value is None:
+        return None
+
+    value = str(value).strip()
+    value = value.replace("L", "1").replace("l", "1")
+    value = value.replace(",", ".")
+
+    match = re.search(r"[-+]?\d*\.?\d+", value)
+    if not match:
+        return None
+
+    num = float(match.group())
+
+    if num.is_integer():
+        return int(num)
+
+    return num
+
+
 def parse_cbc_report(text):
     """
-    Parses raw OCR text from a CBC report and extracts key medical values.
-    Returns a dictionary of structured data.
+    Parse raw extracted text from PDF/Image/TXT/DOCX medical reports.
+    Extracts structured medical values required by the AI model.
     """
+
     structured_data = {}
-    
-    # Define regex patterns for different tests
-    # Using case-insensitive search and allowing for variations in spacing
+
     patterns = {
-        'Hemoglobin (Hb)': r'HEMOGLOBIN\s+([\d\.]+)\s*(?:gm%|g/dL)',
-        'RBC Count': r'RBC COUNT\s+([\d\.]+)',
-        'PCV (Packed Cell Volume)': r'PACKED CELL[^\d]*([\d\.]+)',
-        'MCV': r'MCV[^\d]*([\d\.]+)\s*(?:fl|fL)',
-        'MCH': r'MCH[^\d]*([\d\.]+)\s*(?:pg|pgm)',
-        'MCHC': r'MCHC[^\d]*([\d\.L]+)\s*(?:g/dL|g/L)', # Handled L which might be OCR error for 1 or just range indicator
-        'RDW-SD': r'R\.D\.W-SD[^\d]*([\d\.]+)',
-        'RDW-CV': r'R\.D\.W-CV[^\d]*([\d\.]+)',
-        'WBC Count': r'WBC\s*(\d+)'
+        "Age": [
+            r"\bAge\s*[:\-]?\s*(\d+)",
+            r"\bAge\s*[:\-]?\s*(\d+)\s*(?:years|year|yrs|yr)"
+        ],
+
+        "Hemoglobin": [
+            r"\bHemoglobin\s*(?:\(Hb\))?\s*[:\-]?\s*([\d\.]+)",
+            r"\bHB\s*[:\-]?\s*([\d\.]+)",
+            r"\bHGB\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "RBC_Count": [
+            r"\bRBC\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
+            r"\bRed Blood Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "WBC_Count": [
+            r"\bWBC\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)",
+            r"\bWhite Blood Cell\s*(?:Count)?\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "MCV": [
+            r"\bMCV\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "TSH": [
+            r"\bTSH\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "T4": [
+            r"\bT4\s*[:\-]?\s*([\d\.]+)",
+            r"\bThyroxine\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "Echo_Abnormality_Score": [
+            r"\bEcho\s*Abnormality\s*Score\s*[:\-]?\s*([\d\.]+)",
+            r"\bEchocardiogram\s*Score\s*[:\-]?\s*([\d\.]+)",
+            r"\bEcho\s*Score\s*[:\-]?\s*([\d\.]+)"
+        ],
+
+        "Hearing_Loss_dB": [
+            r"\bHearing\s*Loss\s*dB\s*[:\-]?\s*([\d\.]+)",
+            r"\bHearing\s*Loss\s*[:\-]?\s*([\d\.]+)",
+            r"\bHearing\s*Assessment\s*[:\-]?\s*([\d\.]+)"
+        ]
     }
-    
-    for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            # Clean up the extracted value (e.g. if 'L' was misread in '31L.16')
-            value = match.group(1).replace('L', '1') # Simple heuristic for common OCR error
-            try:
-                # Try to convert to float if it has a decimal, else int
-                if '.' in value:
-                    val = float(value)
-                else:
-                    val = int(value)
-                
-                # Heuristics for missing decimal points (common OCR errors)
-                if key == 'Hemoglobin (Hb)' and val > 50:
-                    val = val / 10.0
-                elif key == 'MCHC' and val > 100:
-                    val = val / 10.0
-                    
-                structured_data[key] = val
-            except ValueError:
-                structured_data[key] = value
-                
+
+    for feature, regex_list in patterns.items():
+        for pattern in regex_list:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                value = _clean_number(match.group(1))
+
+                if value is not None:
+                    structured_data[feature] = value
+                    break
+
+    # Smart correction for common report units / OCR cases
+    if "Hemoglobin" in structured_data and structured_data["Hemoglobin"] > 30:
+        structured_data["Hemoglobin"] = structured_data["Hemoglobin"] / 10.0
+
+    if "WBC_Count" in structured_data:
+        # If WBC is written as 18.5 x10^3/uL, convert to 18500
+        if structured_data["WBC_Count"] < 100:
+            structured_data["WBC_Count"] = int(structured_data["WBC_Count"] * 1000)
+
+    if "RBC_Count" in structured_data and structured_data["RBC_Count"] > 20:
+        structured_data["RBC_Count"] = structured_data["RBC_Count"] / 10.0
+
+    if "MCV" in structured_data and structured_data["MCV"] > 200:
+        structured_data["MCV"] = structured_data["MCV"] / 10.0
+
     return structured_data
 
+
 if __name__ == "__main__":
-    import json
-    import os
-    import sys
-    
-    # Add parent directory to path so we can import ocr module correctly
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from ocr.extract_text import extract_text_from_image
-    
-    image_path = r"datasets/reports_images/test.png"
-    print(f"Extracting text from {image_path}...")
-    try:
-        extracted_text = extract_text_from_image(image_path)
-        print("Parsing extracted text...")
-        result = parse_cbc_report(extracted_text)
-        print("\n===== PARSED DATA =====")
-        print(json.dumps(result, indent=4))
-    except Exception as e:
-        print(f"Error during execution: {e}")
+    sample_text = """
+    Patient Name: Sherif Ahmed
+    Age: 8 Years
+
+    Hemoglobin: 9.4 g/dL
+    RBC Count: 3.8 million/uL
+    WBC Count: 12800 /uL
+    MCV: 74 fL
+
+    TSH: 6.2 mIU/L
+    T4: 0.9 ng/dL
+
+    Echo Abnormality Score: 2
+    Hearing Loss dB: 35
+    """
+
+    result = parse_cbc_report(sample_text)
+    print(result)
