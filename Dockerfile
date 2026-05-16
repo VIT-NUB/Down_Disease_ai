@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies including Tesseract OCR and its English language data
+# Install system dependencies including Tesseract OCR and image/PDF support
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     tesseract-ocr-eng \
@@ -19,11 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application
 COPY . .
 
-# Set Tesseract path explicitly so pytesseract can find it
+# Set Tesseract path explicitly so pytesseract can find language data
 ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
-# Railway sets PORT automatically, fallback to 8000
-ENV PORT=8000
-
-# Start the FastAPI server
-CMD ["python", "api/app.py"]
+# Start the FastAPI server.
+# Railway provides PORT automatically. If PORT is missing, fallback to 8000.
+CMD ["sh", "-c", "python -m uvicorn api.app:app --host 0.0.0.0 --port ${PORT:-8000}"]
